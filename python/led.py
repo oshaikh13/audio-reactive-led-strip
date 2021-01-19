@@ -75,7 +75,7 @@ def _update_esp8266():
                 m += chr(i) + chr(p[0][i]) + chr(p[1][i]) + chr(p[2][i])
             else:
                 m.append(i >> 8)  # Index of pixel to change
-                m.append(i & 0xFF)
+                m.append(i & 0xff)
                 m.append(p[0][i])  # Pixel red value
                 m.append(p[1][i])  # Pixel green value
                 m.append(p[2][i])  # Pixel blue value
