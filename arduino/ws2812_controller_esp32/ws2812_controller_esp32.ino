@@ -5,89 +5,43 @@
 */
 
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiUdp.h>
 #include <NeoPixelBus.h>
+#include "SerialTransfer.h"
+
 
 // Set to the number of LEDs in your LED strip
-#define NUM_LEDS 300
-// Maximum number of packets to hold in the buffer. Don't change this.
-#define BUFFER_LEN 1024
+#define NUM_LEDS 10
 // Toggles FPS output (1 = print FPS over serial, 0 = disable output)
 #define PRINT_FPS 1
 
 //NeoPixelBus settings
 const uint8_t PixelPin = 3;  // make sure to set this to the correct pin, ignored for Esp8266(set to 3 by default for DMA)
 
-// Wifi and socket settings
-const char* ssid     = "LOL";
-const char* password = "nicetry";
-unsigned int localPort = 7777;
-char packetBuffer[BUFFER_LEN];
+SerialTransfer myTransfer;
+
+NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> ledstrip(NUM_LEDS, PixelPin);
 
 uint16_t N = 0;
 
-WiFiUDP port;
-// Network information
-// IP must match the IP in config.py
-// IPAddress ip(192, 168, 0, 150);
-// Set gateway to your router's gateway
-// IPAddress gateway(192, 168, 0, 1);
-// IPAddress subnet(255, 255, 255, 0);
-NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> ledstrip(NUM_LEDS, PixelPin);
+struct pixel_data{
+  uint8_t pixNum;   //offset
+  uint8_t data[90]; //30 pixels of r,g,b i.e. 3*30
+} pixelData;
 
 void setup() {
     Serial.begin(115200);
-    // WiFi.mode(WIFI_STA);
-    // WiFi.config(ip, gateway, subnet);
-    WiFi.begin(ssid, password);
-    Serial.println("");
-    // Connect to wifi and print the IP address over serial
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    
-    Serial.println("");
-    Serial.print("Connected to ");
-    Serial.println(ssid);
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    
-    port.begin(localPort);
-    
+    myTransfer.begin(Serial);
     ledstrip.Begin();//Begin output
     ledstrip.Show();//Clear the strip for use
 }
 
-#if PRINT_FPS
-    uint16_t fpsCounter = 0;
-    uint32_t secondTimer = 0;
-#endif
-
 void loop() {
-    // Read data over socket
-    int packetSize = port.parsePacket();
-    // If packets have been received, interpret the command
-    if (packetSize) {
-        int len = port.read(packetBuffer, BUFFER_LEN);
-        for(int i = 0; i < len; i+=5) {
-            packetBuffer[len] = 0;
-            N = ((packetBuffer[i] << 8) + packetBuffer[i + 1]);
-            RgbColor pixel((uint8_t)packetBuffer[i+2], (uint8_t)packetBuffer[i+3], (uint8_t)packetBuffer[i+4]);//color
-            ledstrip.SetPixelColor(N, pixel);//N is the pixel number
-        } 
+    if (myTransfer.available()) {
+        myTransfer.rxObj(pixelData, sizeof(pixelData));
+        for (uint8_t i=0; i < sizeof(pixelData.data); i=i+3){
+            RgbColor pixel(pixelData.data[i], pixelData.data[i + 1], pixelData.data[i + 2]);
+            ledstrip.SetPixelColor(((uint16_t) pixelData.pixNum * 30) + i / 3, pixel);
+        }
         ledstrip.Show();
-        #if PRINT_FPS
-            fpsCounter++;
-            Serial.print("/");//Monitors connection(shows jumps/jitters in packets)
-        #endif
     }
-    #if PRINT_FPS
-        if (millis() - secondTimer >= 1000U) {
-            secondTimer = millis();
-            Serial.printf("FPS: %d\n", fpsCounter);
-            fpsCounter = 0;
-        }   
-    #endif
 }
